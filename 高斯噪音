@@ -1,0 +1,92 @@
+高斯噪声
+概述：
+高斯噪声是指它的概率密度函数服从高斯分布（即正态分布）的一类噪声。
+与椒盐噪声类似，但是椒盐噪声是随机位置出现固定深度的噪声。
+高斯噪声是在每一个点但是深度随机。
+算法步骤：
+通过概率论里关于正态分布的有关知识能够非常easy的得到其计算方法。
+高斯噪声的概率密度服从高斯分布（正态分布）当中有means（平均值）和sigma（标准方差）两个參数。
+对于每一个输入像素。我们能够通过与符合高斯分布的随机数相加, 得到输出像素。
+   Pout = Pin + F(means,sigma)
+获得一个符合高斯分布的随机数有好几种方法，比方最主要的一个方法是使用标准的正态累积分布函数的反函数。
+除此之外还有其它更加高效的方法。Box-Muller变换就是当中之中的一个。还有一个更加快捷的方法是ziggurat算法。
+而python的random库也提供了产生高斯随机数的方法：
+  高斯分布
+  random.gauss(mu, sigma)
+  mu是平均值mean，sigma是标准方差。
+给一副数字图像加上高斯噪声的处理顺序例如以下：
+
+a.设定參数sigma 和 Xmean
+
+b.产生一个高斯随机数
+
+c.依据输入像素计算出输出像素
+
+d.又一次将像素值限制或放缩在[0 ~ 255]之间
+
+e.循环全部像素
+
+f.输出图像。
+编程例子：
+
+   # -*- coding: utf-8 -*-
+   from PIL import Image
+   from pylab import *
+   from numpy import*
+   import random
+   #读取图片并转为数组
+   im = array(Image.open('./1.jpg'))
+   #设定高斯函数的偏移
+   means = 0
+   #设定高斯函数的标准差
+   sigma = 50
+   #r通道
+   r = im[:,:,0].flatten()
+   #g通道
+   g = im[:,:,1].flatten()
+   #b通道
+   b = im[:,:,2].flatten()
+   #计算新的像素值
+   for i in range(im.shape[0]*im.shape[1]): 
+       pr = int(r[i]) + random.gauss(0,sigma) 
+       pg = int(g[i]) + random.gauss(0,sigma) 
+       pb = int(b[i]) + random.gauss(0,sigma) 
+       if(pr < 0):
+           pr = 0
+       if(pr > 255):
+           pr = 255 
+       if(pg < 0): 
+           pg = 0 
+       if(pg > 255): 
+           pg = 255 
+       if(pb < 0): 
+           pb = 0 
+       if(pb > 255): 
+           pb = 255    
+       r[i] = pr
+       g[i] = pg
+       b[i] = pb
+   im[:,:,0] = r.reshape([im.shape[0],im.shape[1]])
+   im[:,:,1] = g.reshape([im.shape[0],im.shape[1]])
+   im[:,:,2] = b.reshape([im.shape[0],im.shape[1]])
+   #显示图像
+   imshow(im)
+   show()  
+改进版：
+
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+# 读取图像并转换为 numpy 数组 (height, width, 3), dtype=uint8
+im = np.array(Image.open('./1.jpg'))
+# 设置噪声参数
+sigma = 50
+# 生成高斯噪声 (与 im 形状相同，均值为0)
+noise = np.random.normal(0, sigma, im.shape)
+# 添加噪声并裁剪到有效范围，再转为 uint8
+im_noisy = im + noise
+im_noisy = np.clip(im_noisy, 0, 255).astype(np.uint8)
+# 显示图像
+plt.imshow(im_noisy)
+plt.axis('off')   # 不显示坐标轴
+plt.show()

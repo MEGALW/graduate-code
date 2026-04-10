@@ -1,0 +1,10 @@
+LLVIP 数据集
+全称：Low-light Vision Visible-infrared Paired Dataset
+
+特点：包含了严格对齐（Pixel-level Aligned）的暗光可见光图像和红外热成像图像，总共超过 3 万张，主要拍摄于街道夜景。
+
+为什么适合你：它的红外图像质量非常高、对比度清晰。你可以直接把它的红外图像作为你的 high 图像。
+
+获取方式：在 GitHub 或 Google 搜索 "LLVIP dataset"。
+
+由于原始数据集是高质量的数据，而我的训练需要高低质量对比，所以还需要一个能够降数据集质量的代码，将会在down.py展示
