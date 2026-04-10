@@ -226,48 +226,80 @@ class Evaluator:
 # ======================================================
 # 5. 主程序入口
 # ======================================================
+import glob
+import cv2
+from torch.utils.data import Dataset, DataLoader
+
+# --- 新增：真实数据集加载类 ---
+class InfraredDataset(Dataset):
+    def __init__(self, low_dir, high_dir, image_size=256):
+        self.low_paths = sorted(glob.glob(os.path.join(low_dir, "*.*")))
+        self.high_paths = sorted(glob.glob(os.path.join(high_dir, "*.*")))
+        self.image_size = image_size
+        assert len(self.low_paths) == len(self.high_paths), "low和high图片数量不一致！"
+
+    def __len__(self):
+        return len(self.low_paths)
+
+    def __getitem__(self, idx):
+        low_img = cv2.imread(self.low_paths[idx], cv2.IMREAD_GRAYSCALE)
+        high_img = cv2.imread(self.high_paths[idx], cv2.IMREAD_GRAYSCALE)
+        
+        low_img = cv2.resize(low_img, (self.image_size, self.image_size))
+        high_img = cv2.resize(high_img, (self.image_size, self.image_size))
+        
+        low_tensor = torch.from_numpy(low_img).float().unsqueeze(0) / 255.0
+        high_tensor = torch.from_numpy(high_img).float().unsqueeze(0) / 255.0
+        
+        return {"low": low_tensor, "high": high_tensor}
+
+# --- 修改：主程序入口 ---
 def main():
     print(f"🚀 初始化自适应扩散系统 (设备: {cfg.device})...")
     model = AdaptiveInfraredUNet().to(cfg.device)
     pipeline = DiffusionPipeline(cfg.timesteps, cfg.device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=1e-5)
     
-    # [模拟数据生成] 
-    # 工程应用时替换为 DataLoader: for batch in dataloader: low_img = batch['low']...
-    dummy_low = torch.rand(cfg.batch_size, cfg.channels, cfg.image_size, cfg.image_size).to(cfg.device)
-    dummy_high = torch.rand(cfg.batch_size, cfg.channels, cfg.image_size, cfg.image_size).to(cfg.device)
+    # ⚠️ 请确认这里的路径是你存放 LLVIP 图片的实际路径！
+    train_low_dir = "I:/data2/dataset/train/low"
+    train_high_dir = "I:/data2/dataset/train/high"
+    
+    dataset = InfraredDataset(train_low_dir, train_high_dir, image_size=cfg.image_size)
+    dataloader = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=True)
+    print(f"✅ 成功加载数据集！共 {len(dataset)} 对图片。")
     
     best_psnr = 0.0
     
     for epoch in range(1, cfg.epochs + 1):
         model.train()
+        pbar = tqdm(dataloader, desc=f"Epoch [{epoch}/{cfg.epochs}]")
         
-        # 1. 获取动态自适应条件
-        ada_map = generate_adaptive_map(dummy_low)
-        
-        # 2. 正向扩散 (随机采样时间步加噪)
-        t = torch.randint(0, cfg.timesteps, (cfg.batch_size,), device=cfg.device).long()
-        noisy_img, true_noise = pipeline.q_sample(dummy_high, t)
-        
-        # 3. 网络预测与优化
-        pred_noise = model(noisy_img, dummy_low, ada_map, t)
-        loss = F.mse_loss(pred_noise, true_noise)
-        
-        optimizer.zero_grad()
-        loss.backward()
-        # 梯度裁剪防爆显存/训练发散
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
-        
-        # 4. 周期性评估与生成演示
-        if epoch % 10 == 0 or epoch == cfg.epochs:
-            # 验证模式下的逆向生成
-            enhanced_img = pipeline.p_sample_loop(model, dummy_low, ada_map)
-            psnr, ssim = Evaluator.calc_metrics(enhanced_img, dummy_high)
+        for batch in pbar:
+            # 取出真实的低质图和高质图
+            real_low = batch["low"].to(cfg.device)
+            real_high = batch["high"].to(cfg.device)
+            b_size = real_low.shape[0]
             
-            print(f"Epoch [{epoch:03d}/{cfg.epochs}] | Loss: {loss.item():.4f} | PSNR: {psnr:.2f}dB | SSIM: {ssim:.4f}")
+            ada_map = generate_adaptive_map(real_low)
+            t = torch.randint(0, cfg.timesteps, (b_size,), device=cfg.device).long()
+            noisy_img, true_noise = pipeline.q_sample(real_high, t)
             
-            # 保存最优模型
+            pred_noise = model(noisy_img, real_low, ada_map, t)
+            loss = F.mse_loss(pred_noise, true_noise)
+            
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            
+            pbar.set_postfix({"Loss": f"{loss.item():.4f}"})
+        
+        # 周期性评估与保存
+        if epoch % 5 == 0 or epoch == cfg.epochs:
+            enhanced_img = pipeline.p_sample_loop(model, real_low, ada_map)
+            psnr, ssim = Evaluator.calc_metrics(enhanced_img, real_high)
+            print(f"🌟 Epoch [{epoch:03d}] PSNR: {psnr:.2f}dB | SSIM: {ssim:.4f}")
+            
             if psnr > best_psnr:
                 best_psnr = psnr
                 torch.save(model.state_dict(), os.path.join(cfg.save_dir, "best_weight.pth"))
