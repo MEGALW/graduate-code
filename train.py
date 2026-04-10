@@ -21,7 +21,7 @@ class Config:
     epochs: int = 50
     lr: float = 1e-4
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    save_dir: str = "./outputs"
+    save_dir: str = "I:/outputs"
 
 cfg = Config()
 os.makedirs(cfg.save_dir, exist_ok=True)

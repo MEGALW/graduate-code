@@ -42,29 +42,29 @@ def add_gaussian_noise(img, mean=0, var_range=(10, 50)):
 def add_stripe_noise(img, stripe_prob=0.3, intensity_range=(5, 20)):
     """
     4. 添加条纹噪声：模拟红外非均匀性校正 (NUC) 误差
-    这是红外图像特有的典型降质特征
     """
     if np.random.rand() > stripe_prob:
-        return img # 一定概率不添加
+        return img 
         
     degraded = img.astype(np.float32)
     h, w = img.shape
     
-    # 随机生成垂直或水平条纹
     intensity = np.random.uniform(*intensity_range)
     if np.random.rand() > 0.5:
-        # 垂直条纹
+        # 垂直条纹（Numpy 的默认广播规则可以直接匹配，不会报错）
         num_stripes = np.random.randint(5, 20)
         cols = np.random.choice(w, num_stripes, replace=False)
         degraded[:, cols] += np.random.choice([-intensity, intensity], num_stripes)
     else:
-        # 水平条纹
+        # 水平条纹（需要重塑维度以支持广播）
         num_stripes = np.random.randint(5, 20)
         rows = np.random.choice(h, num_stripes, replace=False)
-        degraded[rows, :] += np.random.choice([-intensity, intensity], num_stripes)
+        
+        # 【修改这里👇】加上 .reshape(-1, 1) 将其变成 (18, 1) 的形状
+        noise_values = np.random.choice([-intensity, intensity], num_stripes).reshape(-1, 1)
+        degraded[rows, :] += noise_values
         
     return np.clip(degraded, 0, 255).astype(np.uint8)
-
 def process_image(img):
     """流水线：按顺序执行降质"""
     img = reduce_contrast(img)
@@ -113,10 +113,10 @@ def create_degraded_dataset(high_dir, low_dir):
 if __name__ == "__main__":
     # 【注意】请将下面的路径替换为你电脑上的实际路径
     # 假设你已经把挑选出来的 LLVIP 红外图放到了这个目录
-    SOURCE_HIGH_DIR = "./dataset/train/high" 
+    SOURCE_HIGH_DIR = "I:/data2/dataset/train/high" 
     
     # 脚本会自动创建这个目录，并把生成的渣画质图放进去
-    TARGET_LOW_DIR = "./dataset/train/low"   
+    TARGET_LOW_DIR = "I:/data2/dataset/train/low"   
     
     create_degraded_dataset(SOURCE_HIGH_DIR, TARGET_LOW_DIR)
     print("✅ 数据集降质合成完毕！现在你的扩散模型有事可做了。")
