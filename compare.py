@@ -9,7 +9,7 @@ from skimage.metrics import peak_signal_noise_ratio as psnr_func
 from skimage.metrics import structural_similarity as ssim_func
 
 # 【重要】从你之前的训练代码文件中导入模型结构 (替换为你的实际文件名)
-from train_amd_infrared import AdaptiveInfraredUNet, Config, ImageMetrics, generate_adaptive_map
+from train import AdaptiveInfraredUNet, Config, ImageMetrics, generate_adaptive_map
 
 # ==========================================
 # 0. 经典基线算法实现 (作为对比陪跑)
