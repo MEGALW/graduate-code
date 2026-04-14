@@ -3,7 +3,7 @@
 # ======================================================
 import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
-import random # 记得在文件开头加一句 import random
+
 import math
 import glob
 from dataclasses import dataclass
@@ -54,36 +54,21 @@ class InfraredDataset(Dataset):
     def __len__(self):
         return len(self.low_paths)
 
-
-
     def __getitem__(self, idx):
         # 以灰度图模式读取
         low_img = cv2.imread(self.low_paths[idx], cv2.IMREAD_GRAYSCALE)
         high_img = cv2.imread(self.high_paths[idx], cv2.IMREAD_GRAYSCALE)
         
-        # 获取原图尺寸
-        h, w = low_img.shape
+        # 统一缩放尺寸
+        low_img = cv2.resize(low_img, (self.image_size, self.image_size))
+        high_img = cv2.resize(high_img, (self.image_size, self.image_size))
         
-        # --- 【核心升级 1：随机裁剪 (Random Crop)】 ---
-        # 保证不越界的前提下，随机生成一个左上角坐标
-        top = random.randint(0, h - self.image_size)
-        left = random.randint(0, w - self.image_size)
-        
-        # 抠出 256x256 的原分辨率高清图块
-        low_crop = low_img[top : top + self.image_size, left : left + self.image_size]
-        high_crop = high_img[top : top + self.image_size, left : left + self.image_size]
-        
-        # --- 【核心升级 2：数据增强 (Data Augmentation)】 ---
-        # 50% 的概率水平翻转，相当于让你的数据集翻倍，防止模型死记硬背
-        if random.random() > 0.5:
-            low_crop = cv2.flip(low_crop, 1)
-            high_crop = cv2.flip(high_crop, 1)
-            
-        # 转换为 Tensor
-        low_tensor = torch.from_numpy(low_crop.copy()).float().unsqueeze(0) / 255.0
-        high_tensor = torch.from_numpy(high_crop.copy()).float().unsqueeze(0) / 255.0
+        # 转换为 Tensor，归一化到 [0, 1]，增加通道维度 [1, H, W]
+        low_tensor = torch.from_numpy(low_img).float().unsqueeze(0) / 255.0
+        high_tensor = torch.from_numpy(high_img).float().unsqueeze(0) / 255.0
         
         return {"low": low_tensor, "high": high_tensor}
+
 # ======================================================
 # 3. 核心网络：双重注意力机制与 U-Net
 # ======================================================
@@ -273,9 +258,7 @@ def main():
     model = AdaptiveInfraredUNet().to(cfg.device)
     pipeline = DiffusionPipeline(cfg.timesteps, cfg.device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=1e-5)
-    # --- 【核心升级 3：添加学习率调度器】 ---
-    # 让学习率在 50 个 Epoch 内，从 1e-4 丝滑地降到接近 0
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs, eta_min=1e-6)
+    
     # ---------------------------------------------------------
     # ⚠️ 【重要核对】请确认你的退化数据集路径是否存放在这里：
     # ---------------------------------------------------------
@@ -313,12 +296,6 @@ def main():
             pred_noise = model(noisy_img, real_low, ada_map, t)
             loss = F.mse_loss(pred_noise, true_noise)
             
-            # --- 【核心升级 4：复合损失函数】 ---
-            loss_mse = F.mse_loss(pred_noise, true_noise)
-            loss_l1 = F.l1_loss(pred_noise, true_noise)
-            # 结合两者的优点：MSE 把握全局，L1 保持边缘锐利
-            loss = 0.8 * loss_mse + 0.2 * loss_l1
-
             # 5. 反向传播与优化
             optimizer.zero_grad()
             loss.backward()
@@ -327,7 +304,7 @@ def main():
             
             epoch_loss += loss.item()
             pbar.set_postfix({"Loss": f"{loss.item():.4f}"})
-        scheduler.step()
+        
         # 周期性评估与保存模型 (每 5 个 Epoch 执行一次)
         if epoch % 5 == 0 or epoch == cfg.epochs:
             # 推理阶段从纯噪声开始，进行完整的去噪生成
