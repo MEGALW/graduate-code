@@ -34,13 +34,13 @@ def main():
     
     # --- 【关键核对】路径配置 ---
     cfg = Config()
-    weight_path = os.path.join(cfg.save_dir, "best_weight.pth") # 你的最优权重
+    weight_path = os.path.join(cfg.save_dir, "./best_weight.pth") # 你的最优权重
     
     # 请手动指定下面这两张图的精确路径！
-    low_img_path = "./dataset/test/low/0001.png"   # 待测试的低质量图
-    gt_img_path = "./dataset/test/high/0001.png"    # 对应的原图 (作为完美参考)
+    low_img_path = "I:\data3/dataset/test/low/0001.png"   # 待测试的低质量图
+    gt_img_path = "I:\data3/dataset/test/high/0001.png"    # 对应的原图 (作为完美参考)
     
-    output_folder = "./comparison_plots" 
+    output_folder = "I:\data3\dataset\enhansed_output" 
     os.makedirs(output_folder, exist_ok=True)
 
     # ==========================================
