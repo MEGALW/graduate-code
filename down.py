@@ -113,10 +113,10 @@ def create_degraded_dataset(high_dir, low_dir):
 if __name__ == "__main__":
     # 【注意】请将下面的路径替换为你电脑上的实际路径
     # 假设你已经把挑选出来的 LLVIP 红外图放到了这个目录
-    SOURCE_HIGH_DIR = "I:/data2/dataset/train/high" 
+    SOURCE_HIGH_DIR = "I:/data2/dataset/test/high" 
     
     # 脚本会自动创建这个目录，并把生成的渣画质图放进去
-    TARGET_LOW_DIR = "I:/data2/dataset/train/low"   
+    TARGET_LOW_DIR = "I:/data2/dataset/test/low"   
     
     create_degraded_dataset(SOURCE_HIGH_DIR, TARGET_LOW_DIR)
     print("✅ 数据集降质合成完毕！现在你的扩散模型有事可做了。")
