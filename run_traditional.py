@@ -7,8 +7,8 @@ def main():
     print("⚙️ 启动传统红外图像增强算法 (CLAHE)...")
     
     # 1. 设置输入输出路径 (请根据你的实际情况修改)
-    input_dir = "I:/graduate/test_images"
-    output_dir = "I:/graduate/output_clahe"
+    input_dir = "./test/in"
+    output_dir = "./test/out"
     os.makedirs(output_dir, exist_ok=True)
     
     # 2. 找到所有图片
