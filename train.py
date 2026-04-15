@@ -29,7 +29,7 @@ class Config:
     channels: int = 1
     timesteps: int = 1000
     batch_size: int = 16
-    epochs: int = 50
+    epochs: int = 100
     lr: float = 1e-4
     # 自动检测并调用 AMD 显卡，如果检测不到才会退回 CPU
     device: str = torch_directml.device() if torch_directml.is_available() else "cpu"
@@ -328,18 +328,40 @@ def main():
             epoch_loss += loss.item()
             pbar.set_postfix({"Loss": f"{loss.item():.4f}"})
         scheduler.step()
-        # 周期性评估与保存模型 (每 5 个 Epoch 执行一次)
+# 周期性评估与保存模型 (每 5 个 Epoch 执行一次)
         if epoch % 5 == 0 or epoch == cfg.epochs:
-            # 推理阶段从纯噪声开始，进行完整的去噪生成
-            enhanced_img = pipeline.p_sample_loop(model, real_low, ada_map)
-            psnr, ssim = Evaluator.calc_metrics(enhanced_img, real_high)
+            model.eval() # 开启评估模式
             
-            print(f"🌟 Epoch [{epoch:03d}] 平均 Loss: {epoch_loss/len(dataloader):.4f} | PSNR: {psnr:.2f}dB | SSIM: {ssim:.4f}")
+            # 【核心修复】：不再使用随机抠图测试！读取一张固定不变的测试图
+            # ⚠️ 请确保这两行路径是你电脑里真实存在的一张测试图片
+            test_low_path = "I:/data2/dataset/test/low/0001.png"
+            test_high_path = "I:/data2/dataset/test/high/0001.png"
             
-            # 如果指标创新高，保存最佳权重
+            val_low_np = cv2.imread(test_low_path, cv2.IMREAD_GRAYSCALE)
+            val_high_np = cv2.imread(test_high_path, cv2.IMREAD_GRAYSCALE)
+            
+            # 为了公平对比和加快测试速度，我们固定切取图片最中心的一块 256x256
+            h, w = val_low_np.shape
+            top = (h - cfg.image_size) // 2
+            left = (w - cfg.image_size) // 2
+            
+            val_low_crop = val_low_np[top : top + cfg.image_size, left : left + cfg.image_size]
+            val_high_crop = val_high_np[top : top + cfg.image_size, left : left + cfg.image_size]
+            
+            val_low_tensor = torch.from_numpy(val_low_crop).float().unsqueeze(0).unsqueeze(0).to(cfg.device) / 255.0
+            val_high_tensor = torch.from_numpy(val_high_crop).float().unsqueeze(0).unsqueeze(0).to(cfg.device) / 255.0
+            
+            with torch.no_grad():
+                val_ada_map = generate_adaptive_map(val_low_tensor)
+                enhanced_val_tensor = pipeline.p_sample_loop(model, val_low_tensor, val_ada_map)
+                psnr, ssim = Evaluator.calc_metrics(enhanced_val_tensor, val_high_tensor)
+            
+            print(f"🌟 Epoch [{epoch:03d}] 平均 Loss: {epoch_loss/len(dataloader):.4f} | 真实 PSNR: {psnr:.2f}dB | 真实 SSIM: {ssim:.4f}")
+            
             if psnr > best_psnr:
                 best_psnr = psnr
                 torch.save(model.state_dict(), os.path.join(cfg.save_dir, "best_weight.pth"))
+                print(f"   🏆 打破记录！已保存当前最强权重 (PSNR: {psnr:.2f}dB)")
 
     print("\n🎉 训练周期结束！正在打包部署文件...")
     onnx_path = os.path.join(cfg.save_dir, "adaptive_infrared_enhancer.onnx")
